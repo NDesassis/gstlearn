@@ -82,20 +82,18 @@ jobs:
  
     - name : Install wheel and twine
       run: |
-       ${{env.PYTHON3}} -m pip install wheel
-       ${{env.PYTHON3}} -m pip install twine 
+       ${{env.PYTHON}} -m pip install wheel
+       ${{env.PYTHON}} -m pip install twine 
 
     - name : Build and upload wheel
       run: |
         cd ${{env.BUILD_DIR}}/python/${{env.BUILD_TYPE}}
-        ${{env.PYTHON3}} setup.py bdist_wheel --python-tag=${{matrix.python[1]}} --plat-name=${{matrix.TAG}}
-        ${{env.PYTHON3}} -m twine upload dist/*
+        ${{env.PYTHON}} setup.py bdist_wheel --python-tag=${{matrix.python[1]}} --plat-name=${{matrix.TAG}}
+        ${{env.PYTHON}} -m twine upload dist/*
       env:
         TWINE_USERNAME: __tokenbis__
         TWINE_PASSWORD: ${{ secrets.TWINE_TEST_TOKEN }}
         TWINE_REPOSITORY: testpypi
-
-#--plat-name=macosx_11
 
 
     
