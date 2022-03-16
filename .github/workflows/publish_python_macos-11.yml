@@ -43,7 +43,7 @@ jobs:
       run : echo "PYTHON=python@3.${{matrix.python[0]}}">> $GITHUB_ENV
 
     - name : PYTHONPATH
-      run : echo "PYTHONPATH=/usr/local/opt/${{PYTHON}}/bin/" >>$GITHUB_ENV
+      run : echo "PYTHONPATH=/usr/local/opt/${{env.PYTHON}}/bin/" >>$GITHUB_ENV
    
 
     - name : Download and install Doxygen  
