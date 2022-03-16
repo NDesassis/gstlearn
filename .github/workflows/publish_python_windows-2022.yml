@@ -34,7 +34,7 @@ jobs:
          # - ["cp37","3.7.9"]
        windows-type :
           - ["win_amd64", "x64"]
-         # - ["win32","x86"]
+          - ["win32","x86"]
    
          
     steps:
@@ -52,7 +52,7 @@ jobs:
  
     - name : Modify PATH #to avoid a warning at cmake configuration
       run : |
-        echo "${{env.PYTHONPATH}}\Scripts" >> $GITHUB_PATH        
+        echo "${{env.PYTHONPATH}}" >> $GITHUB_PATH        
 
 #####################################################################################################
 # HDF5 download and install
@@ -125,7 +125,7 @@ jobs:
         ${{env.PYTHON3}} setup.py bdist_wheel --python-tag=${{matrix.python}}[0] --plat-name=${{matrix.windows-type[0]}}
         ${{env.PYTHON3}} -m twine upload dist\* 
       env:
-        TWINE_USERNAME: __tokenbis__
+        TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.TWINE_TEST_TOKEN }}
         TWINE_REPOSITORY: testpypi
 
