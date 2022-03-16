@@ -20,7 +20,6 @@ env:
 
 jobs:   
   build:
-    runs-on: ${{matrix.os[0]}}
     strategy :
       matrix:
        os :
@@ -28,6 +27,8 @@ jobs:
          -["macos-11","macosx_11_0_arm64"]
        python:
          -["cp39"]
+    runs-on: ${{matrix.os[0]}}
+    
     steps:
     - uses: actions/checkout@v2
 
