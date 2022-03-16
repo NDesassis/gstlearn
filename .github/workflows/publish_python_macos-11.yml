@@ -42,10 +42,15 @@ jobs:
     - name :
       run : echo ${{matrix.TAG}}
 
-    - name : Download and install Doxygen  
-      run: brew install doxygen python3.${{matrix.python[0]}}
+    - name : set Python 
+      run : echo "PYTHON=python@3.matrix.python[0]">> $GITHUB_ENV
 
-    - run : brew info python3.${{matrix.python[0]}}
+    - run : echo ${{env.PYTHON}}
+
+    - name : Download and install Doxygen  
+      run: brew install doxygen ${{env.PYTHON}}
+
+    - run : brew info ${{env.PYTHON}}
   
     - name : HDF5
       run : |
