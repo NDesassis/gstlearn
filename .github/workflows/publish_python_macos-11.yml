@@ -39,12 +39,15 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name : set Python 
-      run : echo "PYTHON=python@3.${{matrix.python[0]}}">> $GITHUB_ENV
+    - name : set Python name
+      run : echo "PYTHONNAME=python@3.${{matrix.python[0]}}">> $GITHUB_ENV
 
     - name : PYTHONPATH
-      run : echo "PYTHONPATH=/usr/local/opt/${{env.PYTHON}}/bin/" >>$GITHUB_ENV
+      run : echo "PYTHONPATH=/usr/local/opt/${{env.PYTHONAME}}/bin/" >>$GITHUB_ENV
    
+    - name : set Python exe
+      run : echo "PYTHON3=${{env.PYTHONPATH}}/python3>> $GITHUB_ENV
+
 
     - name : Download and install Doxygen  
       run: brew install doxygen ${{env.PYTHON}}
@@ -84,14 +87,14 @@ jobs:
  
     - name : Install wheel and twine
       run: |
-       ${{env.PYTHON}} -m pip install wheel
-       ${{env.PYTHON}} -m pip install twine 
+       ${{env.PYTHON3}} -m pip install wheel
+       ${{env.PYTHON3}} -m pip install twine 
 
     - name : Build and upload wheel
       run: |
         cd ${{env.BUILD_DIR}}/python/${{env.BUILD_TYPE}}
-        ${{env.PYTHON}} setup.py bdist_wheel --python-tag=${{matrix.python[1]}} --plat-name=${{matrix.TAG}}
-        ${{env.PYTHON}} -m twine upload dist/*
+        ${{env.PYTHON3}} setup.py bdist_wheel --python-tag=${{matrix.python[1]}} --plat-name=${{matrix.TAG}}
+        ${{env.PYTHON3}} -m twine upload dist/*
       env:
         TWINE_USERNAME: __tokenbis__
         TWINE_PASSWORD: ${{ secrets.TWINE_TEST_TOKEN }}
