@@ -43,7 +43,7 @@ jobs:
       run : echo ${{matrix.TAG}}
 
     - name : set Python 
-      run : echo "PYTHON=python@3.matrix.python[0]">> $GITHUB_ENV
+      run : echo "PYTHON=python@3.${{matrix.python[0]}}">> $GITHUB_ENV
 
     - run : echo ${{env.PYTHON}}
 
