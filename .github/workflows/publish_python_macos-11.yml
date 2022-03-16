@@ -33,8 +33,8 @@ jobs:
        python : 
       #  - ["7","cp37"]
         - ["8","cp38"]
-      #  - ["9","cp39"]
-      #  - ["10","cp310"]
+        - ["9","cp39"]
+        - ["10","cp310"]
 
     steps:
     - uses: actions/checkout@v2
@@ -43,7 +43,7 @@ jobs:
       run : echo "PYTHONNAME=python@3.${{matrix.python[0]}}">> $GITHUB_ENV
 
     - name : PYTHONPATH
-      run : echo "PYTHONPATH=/usr/local/opt/${{ env.PYTHONAME }}/bin" >> $GITHUB_ENV
+      run : echo "PYTHONPATH=/usr/local/opt/${{env.PYTHONNAME}}/bin" >> $GITHUB_ENV
    
     - name : set Python exe
       run : echo "PYTHON3=${{env.PYTHONPATH}}/python3">> $GITHUB_ENV
