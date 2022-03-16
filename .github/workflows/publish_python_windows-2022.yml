@@ -33,8 +33,8 @@ jobs:
           - ["cp38","3.8.10"]
          # - ["cp37","3.7.9"]
        windows-type :
-         # - ["win_amd64", "x64"]
-          - ["win32","x86"]
+          - ["win_amd64", "x64"]
+         # - ["win32","x86"]
    
          
     steps:
