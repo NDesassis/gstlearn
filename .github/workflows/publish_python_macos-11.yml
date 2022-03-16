@@ -20,7 +20,14 @@ env:
 
 jobs:   
   build:
-    runs-on: macos-11 
+    runs-on: ${{matrix.os[0]}}
+    strategy :
+      matrix:
+       os :
+         -["macos-10","macosx_10_14_x86_64"]
+         -["macos-11","macosx_11_0_arm64"]
+       python:
+         -["cp39"]
     steps:
     - uses: actions/checkout@v2
 
@@ -66,10 +73,10 @@ jobs:
     - name : Build and upload wheel
       run: |
         cd ${{env.BUILD_DIR}}/python/${{env.BUILD_TYPE}}
-        ${{env.PYTHON3}} setup.py bdist_wheel --python-tag=cp39 --plat-name=macosx_11_0_arm64
+        ${{env.PYTHON3}} setup.py bdist_wheel --python-tag=${{matrix.python[0]}} --plat-name=${{matrix.os[1]}}
         ${{env.PYTHON3}} -m twine upload dist/*
       env:
-        TWINE_USERNAME: __token__
+        TWINE_USERNAME: __tokenbis__
         TWINE_PASSWORD: ${{ secrets.TWINE_TEST_TOKEN }}
         TWINE_REPOSITORY: testpypi
 

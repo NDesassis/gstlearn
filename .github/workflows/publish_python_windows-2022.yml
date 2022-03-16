@@ -18,7 +18,7 @@ env:
   HDF5_VERSION : hdf5-1.12.1
   DOXYGEN_ROOT : Doxygen
   DOXYGEN_URL : https://www.doxygen.nl/files/doxygen-1.9.3.windows.x64.bin.zip
-  COMPILE_VERSION : '"Visual Studio 14 2015"' #Because cmake -G needs " "
+  COMPILE_VERSION : '"Visual Studio 16 2019"' #Because cmake -G needs " "
   PYTHON3_PREF : C:\hostedtoolcache\windows\Python
   PYTHON3_SUFF : x86
 jobs:
@@ -125,7 +125,7 @@ jobs:
         ${{env.PYTHON3}} setup.py bdist_wheel --python-tag=${{matrix.python}}[0] --plat-name=${{matrix.windows-type[0]}}
         ${{env.PYTHON3}} -m twine upload dist\* 
       env:
-        TWINE_USERNAME: __token__
+        TWINE_USERNAME: __tokenbis__
         TWINE_PASSWORD: ${{ secrets.TWINE_TEST_TOKEN }}
         TWINE_REPOSITORY: testpypi
 
