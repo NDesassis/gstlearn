@@ -23,19 +23,27 @@ jobs:
     runs-on: ${{matrix.os}}
     strategy :
       matrix:
-       os : [macos-10,macos-11]
+       os : [macos-10.15,macos-11]
        include :
        - os :  macos-10 
          TAG : "macosx_10_14_x86_64"
 
        - os  : macos-11
          TAG : "macosx_11_0_arm64"
-    
+       python : 
+      #  - ["7","cp37"]
+        - ["8","cp38"]
+        - ["9","cp39"]
+      #  - ["10","cp310"]
+
     steps:
     - uses: actions/checkout@v2
 
+    - name :
+      run : echo ${{matrix.TAG}}
+
     - name : Download and install Doxygen  
-      run: brew install doxygen python3
+      run: brew install doxygen python3.${{matrix.python[0]}}
   
     - name : HDF5
       run : |
@@ -76,7 +84,7 @@ jobs:
     - name : Build and upload wheel
       run: |
         cd ${{env.BUILD_DIR}}/python/${{env.BUILD_TYPE}}
-        ${{env.PYTHON3}} setup.py bdist_wheel --python-tag="cp39" --plat-name=${{env.TAG}}
+        ${{env.PYTHON3}} setup.py bdist_wheel --python-tag=${{matrix.python[1]}} --plat-name=${{matrix.TAG}}
         ${{env.PYTHON3}} -m twine upload dist/*
       env:
         TWINE_USERNAME: __tokenbis__
