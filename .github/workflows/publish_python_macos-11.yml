@@ -39,6 +39,9 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+####################################################################################################
+# Handle python version
+
     - name : set Python name
       run : echo "PYTHONNAME=python@3.${{matrix.python[0]}}">> $GITHUB_ENV
 
@@ -49,10 +52,14 @@ jobs:
       run : echo "PYTHON3=${{env.PYTHONPATH}}/python3">> $GITHUB_ENV
 
 
+####################################################################################################
+# Doxygen
+
     - name : Download and install Doxygen  
       run: brew install doxygen ${{env.PYTHON}}
 
-    - run : brew info ${{env.PYTHON}}
+####################################################################################################
+# Hdf5
   
     - name : HDF5
       run : |
@@ -70,6 +77,8 @@ jobs:
         cmake --build . --target all --config Release -- -j 3
         cmake --build . --target install --config Release
 
+####################################################################################################
+# Boost
 
     - name : Download and uncompressed Boost
       run: |
@@ -79,16 +88,28 @@ jobs:
         7z -o${{env.BOOST_ROOT}} x ${{env.BOOST_ROOT}}/download.tar -y -bd
         cd ${{env.BOOST_ROOT}} && cp -r boost_*/* .
 
+####################################################################################################
+# Configure compilation
+
     - name : Configure Cmake
       run : cmake -B${{env.BUILD_DIR}} -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DBoost_ROOT=${{env.BOOST_ROOT}} -DHDF5_ROOT:PATH=${{env.PROG_ROOT}}/${{env.HDF5_ROOT}}  -DCMAKE_C_FLAGS="-DH5_USE_110_API"  -DPython3_ROOT_DIR=${{env.PYTHONPATH}} 
+
+####################################################################################################
+# Compile library and build python package
 
     - name : Build python package
       run : cmake --build ${{env.BUILD_DIR}} --target python_install --config Release -- -j 3
  
+####################################################################################################
+# Install wheel and twine
+
     - name : Install wheel and twine
       run: |
        ${{env.PYTHON3}} -m pip install wheel
        ${{env.PYTHON3}} -m pip install twine 
+
+####################################################################################################
+# Build and upload wheel
 
     - name : Build and upload wheel
       run: |
