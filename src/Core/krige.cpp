@@ -10,6 +10,7 @@
 /******************************************************************************/
 #include "geoslib_f.h"
 #include "geoslib_old_f.h"
+#include "geoslib_f_private.h"
 #include "geoslib_define.h"
 
 #include "Polynomials/Hermite.hpp"
@@ -32,6 +33,7 @@
 #include "Basic/Law.hpp"
 #include "Basic/File.hpp"
 #include "Basic/OptDbg.hpp"
+#include "Basic/OptCustom.hpp"
 #include "Covariances/CovLMCAnamorphosis.hpp"
 #include "Covariances/CovContext.hpp"
 #include "Covariances/ECalcMember.hpp"
@@ -775,36 +777,6 @@ static double st_get_fext(int rank, int ibfl)
 
 /****************************************************************************/
 /*!
- **  Returns the value of the array (at rank if rank >= 0)
- **  or of the target (at IECH_OUT if rank < 0)
- **
- ** \param[in]  rank   Rank of the sample
- ** \param[in]  isimu  Rank of the simulation
- ** \param[in]  ivar   Rank of the variable
- ** \param[in]  icase  Rank of the PGS and GRF (or -1)
- ** \param[in]  nbsimu Number of simulations
- ** \param[in]  nvar   Number of variables
- **
- *****************************************************************************/
-static double st_get_array(int rank,
-                           int isimu,
-                           int ivar,
-                           int icase,
-                           int nbsimu,
-                           int nvar)
-{
-  double value;
-
-  if (rank >= 0)
-    value = DBIN->getSimvar(ELoc::SIMU, rank, isimu, ivar, icase, nbsimu, nvar);
-  else
-    value = DBOUT->getSimvar(ELoc::SIMU, IECH_OUT, isimu, ivar, icase, nbsimu,
-                             nvar);
-  return (value);
-}
-
-/****************************************************************************/
-/*!
  **  Checks the kriging environment
  **
  ** \return  Error return code
@@ -823,14 +795,12 @@ static int st_check_environment(int flag_in,
                                 Model *model,
                                 ANeighParam *neighparam)
 {
-  double *dbin_mini, *dbin_maxi, *dbout_mini, *dbout_maxi;
   int error, ndim, nvar, nfex;
 
   /* Initializations */
 
   error = 1;
   nvar = ndim = nfex = 0;
-  dbin_mini = dbin_maxi = dbout_mini = dbout_maxi = nullptr;
 
   /*********************************/
   /* Compatibility between two Dbs */
@@ -2200,50 +2170,6 @@ static void st_rhs(Model *model,
 
 /****************************************************************************/
 /*!
- **  Establish the drift part of the kriging R.H.S
- **
- ** \param[in]  model     Model structure
- **
- ** \param[out]  status   Kriging error status
- **
- *****************************************************************************/
-static void st_ff0(Model *model, int *status)
-{
-  int ivar, ib, il, nvar, nbfl, nfeq;
-  double value;
-
-  /* Initializations */
-
-  nvar = model->getVariableNumber();
-  nbfl = model->getDriftNumber();
-  nfeq = model->getDriftEquationNumber();
-
-  /* Establish the drift part */
-
-  if (nbfl <= 0 || nfeq <= 0) return;
-
-  model_calcul_drift(model, ECalcMember::RHS, DBOUT, IECH_OUT, drftab);
-  for (il = 0; il < nbfl; il++)
-    if (FFFF(drftab[il]))
-    {
-      *status = 1;
-      return;
-    }
-
-  for (ivar = 0; ivar < nvar; ivar++)
-    for (ib = 0; ib < nfeq; ib++)
-    {
-      value = 0.;
-      for (il = 0; il < nbfl; il++)
-        value += drftab[il] * model->getCoefDrift(ivar, il, ib);
-      FF0(ib,ivar) = value;
-    }
-
-  return;
-}
-
-/****************************************************************************/
-/*!
  **  Converts from isotopic to heterotopic the R.H.S.
  **
  ** \param[in]  neq  Number of equations
@@ -2498,91 +2424,6 @@ static void st_estimate(Model  *model,
       DBOUT->setArray(IECH_OUT, IPTR_VARZ + ivar, var);
     }
   }
-
-  return;
-}
-
-/****************************************************************************/
-/*!
- **  Calculate the final conditional simulation
- **
- ** \param[in]  model     Model structure
- ** \param[out] smean     Array for simulated posterior mean for the drift means
- ** \param[in]  status    Kriging error status
- ** \param[in]  icase     Rank of the PGS and GRF (or -1)
- ** \param[in]  nbsimu    Number of simulations
- ** \param[in]  nbgh_ranks Vector of selected samples
- ** \param[in]  nred      Reduced number of equations
- **
- ** \remark  KS and BAYES are incompatible: we can use mean in both cases
- **
- *****************************************************************************/
-static void st_simulate(Model *model,
-                        double *smean,
-                        int status,
-                        int icase,
-                        int nbsimu,
-                        const VectorInt& nbgh_ranks,
-                        int nred)
-{
-  int isimu, iech, jech, ivar, jvar, lec, ecr, nvar, nfeq, nech;
-  double simu, mean, data, value;
-
-  /* Initializations */
-
-  nech = (int) nbgh_ranks.size();
-  nvar = model->getVariableNumber();
-  nfeq = model->getDriftEquationNumber();
-
-  /* Simulation */
-
-  for (isimu = ecr = 0; isimu < nbsimu; isimu++)
-    for (ivar = 0; ivar < nvar; ivar++, ecr++)
-    {
-      simu = 0.;
-      if (nfeq <= 0) simu = model->getContext().getMean(ivar);
-
-      if (status == 0)
-      {
-        if (FLAG_BAYES)
-          simu = model_drift_evaluate(0, model, DBOUT, IECH_OUT, ivar,
-                                      &SMEAN(0, isimu), drftab);
-
-        lec = ivar * nred;
-        for (jvar = 0; jvar < nvar; jvar++)
-          for (iech = 0; iech < nech; iech++)
-          {
-            if (!FLAG(iech, jvar)) continue;
-            jech = nbgh_ranks[iech];
-
-            mean = 0.;
-            if (nfeq <= 0) mean = model->getMean(jvar);
-            if (FLAG_BAYES)
-              mean = model_drift_evaluate(1, model, DBIN, jech, jvar,
-                                          &SMEAN(0, isimu), drftab);
-            data = st_get_array(jech, isimu, jvar, icase, nbsimu, nvar);
-            simu -= wgt[lec++] * (data + mean);
-          }
-
-        if (OptDbg::query(EDbg::KRIGING))
-        {
-          value = DBOUT->getArray(IECH_OUT, IPTR_EST + ecr);
-          message("Non-conditional simulation #%d = %lf\n", isimu + 1, value);
-          message("Kriged difference = %lf\n", -simu);
-          message("Conditional simulation #%d = %lf\n", isimu + 1,
-                  value + simu);
-        }
-      }
-      else
-      {
-        // In case of failure with KS, set the contidioning to mean
-        if (nfeq > 0) simu = TEST;
-      }
-
-      /* Add the conditioning kriging to the NC simulation at target */
-      DBOUT->updSimvar(ELoc::SIMU, IECH_OUT, isimu, ivar, icase, nbsimu, nvar,
-                       0, simu);
-    }
 
   return;
 }
@@ -2877,38 +2718,6 @@ static void st_result_kriging_print(int flag_xvalid, int nvar, int status)
 
 /****************************************************************************/
 /*!
- **  Print the simulation results
- **
- ** \param[in]  nbsimu       Number of simulations
- ** \param[in]  nvar         Number of variables
- ** \param[in]  status       Kriging error status
- **
- *****************************************************************************/
-static void st_result_simulate_print(int nbsimu, int nvar, int status)
-{
-  int ivar, isimu, ecr;
-  double value;
-
-  /* Header */
-
-  mestitle(0, "Simulation results");
-
-  /* Loop on the results */
-
-  for (isimu = ecr = 0; isimu < nbsimu; isimu++)
-    for (ivar = 0; ivar < nvar; ivar++, ecr++)
-    {
-      message("Simulation #%d of Z%-2d : ", isimu + 1, ivar + 1);
-      value = (status == 0) ? DBOUT->getArray(IECH_OUT, IPTR_EST + ecr) :
-                              TEST;
-      tab_printg(" = ", value);
-      message("\n");
-    }
-  return;
-}
-
-/****************************************************************************/
-/*!
  **  Print the neighborhood parameters
  **
  ** \param[in]  status  Kriging error status
@@ -2929,124 +2738,6 @@ static void st_res_nbgh_print(int status, double *tab)
   message("Number of non-empty sectors         = %d\n", (int) tab[3]);
   message("Number of consecutive empty sectors = %d\n", (int) tab[4]);
 
-  return;
-}
-
-/****************************************************************************/
-/*!
- **  Check the consistency of the Colocation specification
- **
- ** \return  Error return code
- **
- ** \param[in]  dbin          Input Db structure
- ** \param[in]  dbout         Output Db structure
- ** \param[in]  rank_colcok   Array of ranks of colocated variables
- **
- ** \remarks The array 'rank_colcok' (if present) must be dimensioned
- ** \remarks to the number of variables in Dbin.
- ** \remarks Each element gives the rank of the colocated variable within Dbout
- ** \remarks or -1 if not colocated
- ** \remarks If the array 'rank_colcok' is absent, colocation option is OFF.
- **
- ** \remarks In input, the numbering in ; rank_colcok' starts from 1
- ** \remarks In output, the numbering starts from 0
- **
- ** \remarks FLAG_COLK is defined in this function
- **
- *****************************************************************************/
-static int st_check_colcok(Db *dbin, Db *dbout, int *rank_colcok)
-{
-  int ivar, jvar;
-
-  FLAG_COLK = 0;
-  if (rank_colcok == nullptr) return (0);
-
-  /* Loop on the ranks of the colocated variables */
-
-  for (ivar = 0; ivar < dbin->getVariableNumber(); ivar++)
-  {
-    jvar = rank_colcok[ivar];
-    if (IFFFF(jvar)) jvar = 0;
-    if (jvar > dbout->getColumnNumber())
-    {
-      messerr("Error in the Colocation array:");
-      messerr("Input variable (#%d): rank of the colocated variable is %d",
-              ivar + 1, jvar);
-      messerr("But the Output file only contains %d attributes(s)",
-              dbout->getColumnNumber());
-      return (1);
-    }
-    rank_colcok[ivar] = jvar - 1;
-  }
-
-  // Assign the array of ranks as a global variable
-  RANK_COLCOK = rank_colcok;
-  FLAG_COLK = 1;
-  return (0);
-}
-
-/****************************************************************************/
-/*!
- **  Save the (Co-) Kriging weights using the keypair mechanism
- **
- ** \param[in]  status   Kriging error status
- ** \param[in]  iech_out Rank of the output sample
- ** \param[in]  nvar     Number of variables
- ** \param[in]  nbgh_ranks Vector of selected samples
- ** \param[in]  nred     Reduced number of equations
- ** \param[in]  flag     Flag array
- ** \param[in]  wgt      Array of Kriging weights
- **
- *****************************************************************************/
-static void st_save_keypair_weights(int status,
-                                    int iech_out,
-                                    int nvar,
-                                    const VectorInt& nbgh_ranks,
-                                    int nred,
-                                    int *flag,
-                                    double *wgt)
-{
-  double wgtloc, values[5];
-  int lec, flag_value, iwgt, cumflag;
-
-  /* Initializations */
-
-  int nech = (int) nbgh_ranks.size();
-  if (status != 0) return;
-  values[0] = iech_out;
-
-  /* Loop on the output variables */
-
-  for (int jvar = lec = cumflag = 0; jvar < nvar; jvar++)
-  {
-    values[1] = jvar;
-
-    /* Loop on the input samples */
-
-    for (int iech = 0; iech < nech; iech++, lec++)
-    {
-      flag_value = (flag != nullptr) ? flag[lec] : 1;
-      if (flag_value)
-      {
-        values[2] = nbgh_ranks[iech];
-
-        /* Loop on the input variables */
-
-        for (int ivar = 0; ivar < nvar; ivar++)
-        {
-          iwgt = nred * ivar + cumflag;
-          wgtloc = (wgt != nullptr && flag_value) ? wgt[iwgt] : TEST;
-          if (!FFFF(wgtloc))
-          {
-            values[3] = ivar;
-            values[4] = wgtloc;
-            app_keypair("KrigingWeights", 1, 1, 5, values);
-          }
-        }
-        if (flag_value) cumflag++;
-      }
-    }
-  }
   return;
 }
 
@@ -3403,279 +3094,6 @@ int krigprof(Db *dbin,
 
 /****************************************************************************/
 /*!
- **  Management of internal arrays used by bayesian procedure
- **
- ** \return  Error return code
- **
- ** \param[in]  mode      1 for allocation; -1 for deallocation
- ** \param[in]  nbsimu    Number of simulation (0 for kriging)
- ** \param[in]  model     Model structure
- **
- ** \param[out] rmean     Array giving the posterior means for the drift terms
- ** \param[out] rcov      Array containing the posterior covariance matrix
- **                       for the drift terms
- ** \param[out] smean     Array for simulated posterior mean for the drift means
- **                       (only if nbsimu > 0)
- **
- *****************************************************************************/
-static int bayes_manage(int mode,
-                        int nbsimu,
-                        Model *model,
-                        double **rmean,
-                        double **rcov,
-                        double **smean)
-{
-  int nfeq;
-
-  /* Initializations */
-
-  nfeq = model->getDriftEquationNumber();
-
-  /* Dispatch */
-
-  if (mode == 1)
-  {
-
-    /* Allocation */
-
-    *rmean = st_core(nfeq, 1);
-    if (*rmean == nullptr) return (1);
-    *rcov = st_core(nfeq, nfeq);
-    if (*rcov == nullptr) return (1);
-    if (nbsimu > 0)
-    {
-      *smean = st_core(nfeq, nbsimu);
-      if (*smean == nullptr) return (1);
-    }
-  }
-  else
-  {
-
-    /* Deallocation */
-
-    *rmean = (double*) mem_free((char* ) (*rmean));
-    *rcov = (double*) mem_free((char* ) (*rcov));
-    if (nbsimu > 0) *smean = (double*) mem_free((char* ) (*smean));
-  }
-  return (0);
-}
-
-/****************************************************************************/
-/*!
- **  Perform the Bayesian estimation of the Drift Coefficients
- **
- ** \return  Error return code
- **
- ** \param[in]  model      Model structure
- ** \param[in]  neighparam ANeighParam structure
- ** \param[in]  nbghw      NeighWork structure
- ** \param[in]  dmean      Array giving the prior means for the drift terms
- ** \param[in]  dcov       Array containing the prior covariance matrix
- **                        for the drift terms
- **
- ** \param[out] rmean      Array giving the posterior means for the drift terms
- ** \param[out] rcov       Array containing the  posterior covariance matrix
- **                        for the drift terms
- **
- *****************************************************************************/
-static int bayes_precalc(Model *model,
-                         ANeighParam *neighparam,
-                         NeighWork& nbghw,
-                         double *dmean,
-                         double *dcov,
-                         double *rmean,
-                         double *rcov)
-{
-  int nfeq,error,status,nech,nred,neq,shift,ib,jb,il,jl,flag_fix;
-  double *ff,*smu,*sigma,*vars;
-  VectorInt nbgh_ranks;
-
-  /* Initializations */
-
-  error = 1;
-  nfeq = model->getDriftEquationNumber();
-  ff = smu = sigma = vars = nullptr;
-
-  /* Preliminary Checks */
-
-  if (neighparam->getType() != ENeigh::UNIQUE)
-  {
-    messerr("The Bayesian Estimation of the Drift Coefficients");
-    messerr("is only available in Unique Neighborhood");
-    goto label_end;
-  }
-
-  /* Core allocation */
-
-  IECH_OUT = DBIN->getSampleNumber() / 2;
-
-  /* Check that the variance-covariance matrix is symmetric */
-
-  flag_fix = is_matrix_null(nfeq, nfeq, dcov, 0);
-  if (!is_matrix_symmetric(nfeq, dcov, 1)) goto label_end;
-
-  /* Prepare the Kriging matrix (without correction) */
-
-  nbgh_ranks = nbghw.select(DBOUT, IECH_OUT);
-  nech = (int) nbgh_ranks.size();
-  status = nbgh_ranks.empty();
-
-  FLAG_BAYES = 0;
-  st_prepar(model, neighparam, nbgh_ranks, &status, &nred, &neq);
-  FLAG_BAYES = 1;
-  if (status) goto label_end;
-  shift = nred - nfeq;
-
-  /* Complementary core allocation */
-
-  ff = st_core(shift, nfeq);
-  if (ff == nullptr) goto label_end;
-  smu = st_core(shift, 1);
-  if (smu == nullptr) goto label_end;
-  sigma = st_core(shift, shift);
-  if (sigma == nullptr) goto label_end;
-  vars = st_core(shift, 1);
-  if (vars == nullptr) goto label_end;
-
-  // Create the array of variables
-
-  ib = 0;
-  for (int iech = 0; iech < DBIN->getSampleNumber(); iech++)
-  {
-    if (!DBIN->isActive(iech)) continue;
-    for (int ivar = 0; ivar < DBIN->getVariableNumber(); ivar++)
-    {
-      double value = DBIN->getVariable(nbgh_ranks[iech], ivar);
-      if (FFFF(value)) continue;
-      vars[ib++] = value;
-    }
-  }
-
-  /* Copy DCOV into S and DMEAN into RMEAN */
-
-  (void) memcpy((char*) rcov, (char*) dcov, sizeof(double) * nfeq * nfeq);
-  (void) memcpy((char*) rmean, (char*) dmean, sizeof(double) * nfeq);
-  if (flag_fix) goto label_print;
-
-  /* Establish the drift array FF */
-
-  for (il = 0; il < nfeq; il++)
-    for (ib = 0; ib < shift; ib++)
-      FF(ib,il) = LHS_B(ib, shift + il);
-
-  /* Calculate S-1 */
-
-  if (matrix_invert(rcov, nfeq, -1)) goto label_end;
-
-  /* Calculate: SMU = S-1 * MEAN */
-
-  matrix_product(nfeq, nfeq, 1, rcov, dmean, smu);
-
-  /* Covariance matrix SIGMA */
-
-  for (ib = 0; ib < shift; ib++)
-    for (jb = 0; jb < shift; jb++)
-      SIGMA(ib,jb) = LHS_B(ib, jb);
-
-  /* Calculate SIGMA-1 */
-
-  if (matrix_invert(sigma, shift, -1)) goto label_end;
-
-  /* Inverse of posterior covariance matrix: SC-1 = FFt * SIGMA-1 * FF + S-1 */
-
-  for (il = 0; il < nfeq; il++)
-    for (jl = 0; jl < nfeq; jl++)
-    {
-      double value = 0.;
-      for (ib=0; ib<shift; ib++)
-        for (jb=0; jb<shift; jb++)
-          value += FF(ib,il) * SIGMA(ib,jb) * FF(jb,jl);
-      RCOV(il,jl) += value;
-    }
-
-  /* Calculating: SMU = FFt * SIGMA-1 * Z + S-1 * MU */
-
-  for (il = 0; il < nfeq; il++)
-  {
-    double value = 0.;
-    for (ib=0; ib<shift; ib++)
-      for (jb=0; jb<shift; jb++)
-        value += FF(ib,il) * SIGMA(ib,jb) * vars[jb];
-    SMU(il) += value;
-  }
-
-  /* Posterior mean: RMEAN = SC * SMU */
-
-  if (matrix_invert(rcov, nfeq, -1)) goto label_end;
-  matrix_product(nfeq, nfeq, 1, rcov, smu, rmean);
-
-  label_print: if (OptDbg::query(EDbg::BAYES))
-  {
-    mestitle(0, "Bayesian Drift coefficients");
-    print_matrix("Prior Mean", 0, 1, nfeq, 1, NULL, dmean);
-    print_matrix("Prior Variance-Covariance", 0, 1, nfeq, nfeq, NULL, dcov);
-
-    print_matrix("Posterior Mean", 0, 1, nfeq, 1, NULL, rmean);
-    print_matrix("Posterior Variance-Covariance", 0, 1, nfeq, nfeq, NULL, rcov);
-    message("\n");
-  }
-
-  /* Set the error return code */
-
-  error = 0;
-
-  label_end:
-
-  /* Core deallocation */
-
-  ff = (double*) mem_free((char* ) ff);
-  smu = (double*) mem_free((char* ) smu);
-  sigma = (double*) mem_free((char* ) sigma);
-  vars = (double*) mem_free((char* ) vars);
-
-  return (error);
-}
-
-/****************************************************************************/
-/*!
- **  Correct the arrays RHS and VARB in Bayesian case
- **
- ** \param[in]  model  Model structure
- ** \param[in]  rcov   Array containing the posterior covariance matrix
- **                    for the drift terms
- **
- ** \param[out] status Returned status
- **
- *****************************************************************************/
-static void st_bayes_correct(Model *model, double *rcov, int *status)
-{
-  int ivar, jvar, il, jl, nvar, nfeq;
-
-  /* Initializations */
-
-  nvar = model->getVariableNumber();
-  nfeq = model->getDriftEquationNumber();
-
-  /* Establish the Drift matrix */
-
-  st_ff0(model, status);
-  if (*status) return;
-
-  /* Correct the arrays */
-
-  for (ivar = 0; ivar < nvar; ivar++)
-    for (jvar = 0; jvar < nvar; jvar++)
-    {
-      VARB(ivar,jvar) = 0.;
-      for (il = 0; il < nfeq; il++)
-        for (jl = 0; jl < nfeq; jl++)
-          VARB(ivar,jvar) += FF0(il,ivar) * RCOV(il, jl) * FF0(jl, jvar);
-    }
-  return;
-}
-
-/****************************************************************************/
-/*!
  **  Estimation with Bayesian Drift
  **
  ** \return  Error return code
@@ -3779,7 +3197,7 @@ int test_neigh(Db *dbin,
                ANeighParam *neighparam,
                const NamingConvention &namconv)
 {
-  int error, status, nech, ntab, iext;
+  int error, status, ntab, iext;
   NeighWork nbghw;
   VectorInt nbgh_ranks;
 
@@ -3824,7 +3242,6 @@ int test_neigh(Db *dbin,
     /* Select the Neighborhood */
 
     nbgh_ranks = nbghw.select(DBOUT, IECH_OUT);
-    nech = (int) nbgh_ranks.size();
     status = nbgh_ranks.empty();
 
     /* Retrieve the neighborhood parameters */
@@ -3871,6 +3288,7 @@ int test_neigh(Db *dbin,
  ** \param[in]  dbout      output Db structure
  ** \param[in]  model      Model structure
  ** \param[in]  neighparam ANeighParam structure
+ ** \param[in]  flag_bayes 1 if Bayes option is switched ON
  ** \param[in]  dmean      Array giving the prior means for the drift terms
  ** \param[in]  dcov       Array containing the prior covariance matrix
  **                        for the drift terms
@@ -3880,181 +3298,18 @@ int test_neigh(Db *dbin,
  ** \param[in]  rval       Change of support coefficient
  **
  *****************************************************************************/
-static int st_krigsim_old(const char *strloc,
-                          Db *dbin,
-                          Db *dbout,
-                          Model *model,
-                          ANeighParam *neighparam,
-                          double *dmean,
-                          double *dcov,
-                          int icase,
-                          int nbsimu,
-                          int flag_dgm,
-                          double rval)
-{
-  int error, status, nech, neq, nred, nvar, iext, nfeq;
-  double *rmean, *rcov, *smean;
-  Model *model_sk;
-  NeighWork nbghw;
-  VectorInt nbgh_ranks;
-
-  /* Preliminary checks */
-
-  error = 1;
-  iext = -1;
-  nvar = neq = nred = 0;
-  model_sk = nullptr;
-  rmean = smean = rcov = nullptr;
-  st_global_init(dbin, dbout);
-  FLAG_BAYES = (dmean != nullptr);
-  FLAG_EST = 1;
-  FLAG_STD = 0;
-  FLAG_WGT = 1;
-  FLAG_SIMU = 1;
-  FLAG_DGM = flag_dgm;
-  R_COEFF = rval;
-  IPTR_EST = dbout->getColIdxByLocator(ELoc::SIMU, 0);
-  if (st_check_environment(1, 1, model, neighparam)) goto label_end;
-  if (manage_external_info(1, ELoc::F, DBIN, DBOUT, &iext)) goto label_end;
-  if (manage_nostat_info(1, model, DBIN, DBOUT)) goto label_end;
-  nvar = model->getVariableNumber();
-  nfeq = model->getDriftEquationNumber();
-
-  /* Core allocation */
-
-  if (FLAG_BAYES)
-  {
-    if (bayes_manage(1, nbsimu, model, &rmean, &rcov, &smean)) goto label_end;
-  }
-
-  /* Pre-calculations */
-
-  nbghw.initialize(DBIN, neighparam);
-  nbghw.setFlagSimu(FLAG_SIMU);
-  if (st_model_manage(1, model)) goto label_end;
-  if (st_krige_manage(1, nvar, model, neighparam)) goto label_end;
-  if (krige_koption_manage(1, 1, EKrigOpt::PONCTUAL, 1, VectorInt()))
-    goto label_end;
-  if (FLAG_STD != 0) st_variance0(model, nvar, VectorVectorDouble());
-
-  /* Solve the Bayesian estimation of the Drift coefficients */
-
-  if (FLAG_BAYES)
-  {
-    if (bayes_precalc(model, neighparam, nbghw, dmean, dcov, rmean, rcov))
-      goto label_end;
-  }
-
-  /* Simulate the drift coefficients from the posterior distributions */
-
-  if (FLAG_BAYES)
-  {
-    if (bayes_simulate(model, nbsimu, rmean, rcov, smean)) goto label_end;
-  }
-
-  /* Duplicate the model, suppressing the Drift terms */
-
-  if (FLAG_BAYES)
-  {
-    model_sk = model_duplicate(model, 0., -1);
-    if (model_sk == nullptr) goto label_end;
-  }
-  else
-  {
-    model_sk = model;
-  }
-
-  /* Loop on the targets to be processed */
-
-  status = 0;
-  for (IECH_OUT = 0; IECH_OUT < DBOUT->getSampleNumber(); IECH_OUT++)
-  {
-    mes_process(strloc, DBOUT->getSampleNumber(), IECH_OUT);
-    OptDbg::setIndex(IECH_OUT + 1);
-    if (!dbout->isActive(IECH_OUT)) continue;
-    if (OptDbg::query(EDbg::KRIGING) || OptDbg::query(EDbg::NBGH) || OptDbg::query(EDbg::RESULTS))
-    {
-      mestitle(1, "Target location");
-      db_sample_print(dbout, IECH_OUT, 1, 0, 0);
-    }
-
-    /* Select the Neighborhood */
-
-    nbgh_ranks = nbghw.select(DBOUT, IECH_OUT);
-    nech = (int) nbgh_ranks.size();
-    status = nbgh_ranks.empty();
-    if (status) goto label_store;
-
-    /* Establish the kriging L.H.S. */
-
-    if (! nbghw.isUnchanged() || neighparam->getFlagContinuous() || OptDbg::force())
-    {
-      st_prepar(model_sk, neighparam, nbgh_ranks, &status, &nred, &neq);
-      if (status) goto label_store;
-    }
-
-    /* Establish the kriging R.H.S. */
-
-    st_rhs(model_sk, nbgh_ranks, neq, nvar, VectorVectorDouble(), &status);
-    if (status) goto label_store;
-    st_rhs_iso2hetero(neq, nvar);
-
-    /* Modify the arrays in the Bayesian case */
-
-    if (FLAG_BAYES)
-    {
-      st_bayes_correct(model, dcov, &status);
-      if (status) goto label_store;
-    }
-    if (OptDbg::query(EDbg::KRIGING))
-      krige_rhs_print(nvar, nech, neq, nred, flag, rhs);
-
-    /* Derive the kriging weights */
-
-    if (FLAG_WGT)
-    {
-      matrix_product(nred, nred, nvar, lhs, rhs, wgt);
-      if (OptDbg::query(EDbg::KRIGING))
-        krige_wgt_print(status, nvar, nvar, nfeq, nbgh_ranks, nred, icase, flag, wgt);
-    }
-
-    /* Perform the simulation */
-
-    label_store:
-    st_simulate(model, smean, status, icase, nbsimu, nbgh_ranks, nred);
-    if (OptDbg::query(EDbg::RESULTS))
-      st_result_simulate_print(nbsimu, nvar, status);
-  }
-
-  /* Set the error return flag */
-
-  error = 0;
-
-  label_end: OptDbg::setIndex(0);
-  if (FLAG_BAYES)
-  {
-    model_sk = model_free(model_sk);
-    (void) bayes_manage(-1, nbsimu, model, &rmean, &rcov, &smean);
-  }
-  (void) st_model_manage(-1, model);
-  (void) st_krige_manage(-1, nvar, model, neighparam);
-  (void) krige_koption_manage(-1, 1, EKrigOpt::PONCTUAL, 1, VectorInt());
-  (void) manage_external_info(-1, ELoc::F, DBIN, DBOUT, &iext);
-  (void) manage_nostat_info(-1, model, DBIN, DBOUT);
-  return (error);
-}
-
-static int st_krigsim_new(const char *strloc,
-                          Db *dbin,
-                          Db *dbout,
-                          Model *model,
-                          ANeighParam *neighparam,
-                          double *dmean,
-                          double *dcov,
-                          int icase,
-                          int nbsimu,
-                          int flag_dgm,
-                          double rval)
+int _krigsim(const char *strloc,
+             Db *dbin,
+             Db *dbout,
+             Model *model,
+             ANeighParam *neighparam,
+             int flag_bayes,
+             const VectorDouble& dmean,
+             const VectorDouble& dcov,
+             int icase,
+             int nbsimu,
+             int flag_dgm,
+             double rval)
 {
   // Preliminary checks
 
@@ -4067,32 +3322,18 @@ static int st_krigsim_new(const char *strloc,
   // Initializations
 
   int iptr_est  = -1;
-  int nvar = model->getVariableNumber();
-  int nfeq = model->getDriftNumber();
 
   /* Add the attributes for storing the results */
 
   iptr_est = dbout->getColIdxByLocator(ELoc::SIMU, 0);
   if (iptr_est < 0) return 1;
 
-  /* Bayesian temporary code */
-
-  bool flag_bayes = false;
-  VectorDouble prior_mean;
-  VectorDouble prior_cov;
-  if (dmean != nullptr && dcov != nullptr && nfeq > 0)
-  {
-    flag_bayes = true;
-    prior_mean = ut_vector_set(dmean, nfeq);
-    prior_cov  = ut_vector_set(dcov, nfeq * nfeq);
-  }
-
   /* Setting options */
 
   KrigingSystem ksys(dbin, dbout, model, neighparam);
   if (ksys.setKrigOptFlagSimu(true, nbsimu, icase)) return 1;
   if (ksys.setKrigOptEstim(iptr_est, -1, -1)) return 1;
-  if (ksys.setKrigOptBayes(flag_bayes, prior_mean, prior_cov)) return 1;
+  if (ksys.setKrigOptBayes(flag_bayes, dmean, dcov)) return 1;
   if (ksys.setKrigOptDGM(flag_dgm, rval)) return 1;
   if (! ksys.isReady()) return 1;
 
@@ -4105,27 +3346,6 @@ static int st_krigsim_new(const char *strloc,
   }
 
   return 0;
-}
-
-int _krigsim(const char *strloc,
-             Db *dbin,
-             Db *dbout,
-             Model *model,
-             ANeighParam *neighparam,
-             double *dmean,
-             double *dcov,
-             int icase,
-             int nbsimu,
-             int flag_dgm,
-             double rval)
-{
-  double value;
-
-  int test = (int) get_keypone("krigsim", 0);
-  if (test == 0)
-    return st_krigsim_old(strloc, dbin, dbout, model, neighparam, dmean, dcov, icase, nbsimu, flag_dgm, rval);
-  else
-    return st_krigsim_new(strloc, dbin, dbout, model, neighparam, dmean, dcov, icase, nbsimu, flag_dgm, rval);
 }
 
 /****************************************************************************/
@@ -4273,8 +3493,6 @@ Global_Res global_kriging(Db *dbin,
 
   // Initializations
 
-  int iptr_est  = -1;
-  int iptr_std  = -1;
   int ndim = dbin->getNDim();
   int nvar = model->getVariableNumber();
   neighU = NeighUnique(ndim, false);
@@ -6033,9 +5251,9 @@ int anakexp_3D(DbGrid *db,
  *****************************************************************************/
 int bayes_simulate(Model *model,
                    int nbsimu,
-                   double *rmean,
-                   double *rcov,
-                   double *smean)
+                   const VectorDouble& rmean,
+                   const VectorDouble& rcov,
+                   VectorDouble& smean)
 {
   double *trimat, *rndmat;
   int nfeq, il, isimu, nftri, error, rank, memo;
@@ -6057,7 +5275,7 @@ int bayes_simulate(Model *model,
 
   /* Cholesky decomposition */
 
-  rank = matrix_cholesky_decompose(rcov, trimat, nfeq);
+  rank = matrix_cholesky_decompose(rcov.data(), trimat, nfeq);
   if (rank > 0)
   {
     messerr("Error in the Cholesky Decomposition of the covariance matrix");
@@ -8803,7 +8021,7 @@ static int st_declustering_3(Db *db,
                              VectorInt ndisc,
                              int verbose)
 {
-  int error, status, nech, nred, neq, nvar, ecr;
+  int error, status, nred, neq, nvar, ecr;
   double ldum;
   NeighWork nbghw;
   VectorInt nbgh_ranks;
@@ -8838,7 +8056,6 @@ static int st_declustering_3(Db *db,
     /* Select the Neighborhood */
 
     nbgh_ranks = nbghw.select(DBOUT,  IECH_OUT);
-    nech = (int) nbgh_ranks.size();
     status = nbgh_ranks.empty();
     if (status) continue;
 
@@ -9586,7 +8803,7 @@ int inhomogeneous_kriging(Db *dbdat,
                           Model *model_dat,
                           Model *model_src)
 {
-  int error, np, ip, ns, ng, nvar, neq, nred, nfeq, nbfl, status, nech;
+  int error, np, ip, ns, ng, nvar, neq, nred, nfeq, nbfl;
   double *covss, *distps, *distgs, *covpp, *covgp, *covgg, *prodps, *prodgs;
   double *data, *lambda, *driftp, *driftg, *ymat, *zmat, *mu, *maux, *rhs;
   double estim, stdev, auxval;
@@ -9756,8 +8973,6 @@ int inhomogeneous_kriging(Db *dbdat,
     // Neighborhood search
 
     nbgh_ranks = nbghw.select(DBOUT, IECH_OUT);
-    nech = (int) nbgh_ranks.size();
-    status = nbgh_ranks.empty();
     rhs = &COVGP(IECH_OUT, 0);
 
     /* Optional printout of the R.H.S */

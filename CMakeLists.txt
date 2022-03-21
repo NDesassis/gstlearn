@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 
 # Permit using project VERSION
 project(gstlearn
-        VERSION      0.1.23 # Make it consistent with CHANGES and gstlearn.bib files
+        VERSION      0.1.20 # Make it consistent with CHANGES and gstlearn.bib files
         DESCRIPTION  "Geostatistics & Machine Learning toolbox"
         HOMEPAGE_URL https://github.com/gstlearn/gstlearn
         LANGUAGES    C CXX) # Enable C language for third party libraries
@@ -45,7 +45,7 @@ include(cmake/install.cmake)
 
 # TODO : Make packages configuration / compilation optional
 add_subdirectory(python)
-#add_subdirectory(r)
+add_subdirectory(r)
 #add_subdirectory(r)
 
 
