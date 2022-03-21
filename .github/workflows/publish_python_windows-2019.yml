@@ -98,7 +98,8 @@ jobs:
 
     - name : Configure Cmake
       run : |
-       cmake -B${{env.BUILD_DIR}} -G ${{env.COMPILE_VERSION}} -DBoost_ROOT=${{env.BOOST_ROOT}} -DDoxygen_ROOT=${{env.DOXYGEN_ROOT}} -DPython3_ROOT_DIR=${{env.PYTHONPATH}} -DUSE_HDF5=OFF -DHDF5_ROOT:PATH=${{env.PROG_ROOT}}\${{env.HDF5_ROOT}}  -DCMAKE_C_FLAGS="-DH5_USE_110_API"  
+       cmake -B${{env.BUILD_DIR}} -G ${{env.COMPILE_VERSION}} -DBoost_ROOT=${{env.BOOST_ROOT}} -DDoxygen_ROOT=${{env.DOXYGEN_ROOT}} -DPython3_ROOT_DIR=${{env.PYTHONPATH}} -DUSE_HDF5=OFF 
+#-DHDF5_ROOT:PATH=${{env.PROG_ROOT}}\${{env.HDF5_ROOT}}  -DCMAKE_C_FLAGS="-DH5_USE_110_API"  
 
    
 ########################################################################################################
